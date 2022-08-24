@@ -26,7 +26,7 @@ cmake "-H$LLVM_REPO/llvm" \
      -DCMAKE_INSTALL_PREFIX:PATH=$INSTALL_DIR \
                  #  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_ENABLE_LLD=ON
 
-cmake --build $BUILD_DIR --target check-mlir -j 10
+cmake --build $BUILD_DIR --target check-mlir -j
 #cmake --build $BUILD_DIR --target install -j 10
 pushd $BUILD_DIR
 make lli # lli needs to be build separately for testing
