@@ -21,3 +21,5 @@
 
 #define GET_OP_CLASSES
 #include "Hello/HelloOps.cpp.inc"
+
+using namespace mlir;
