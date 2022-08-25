@@ -29,14 +29,21 @@
 
 using namespace mlir;
 
-static mlir::MemRefType convertTensorToMemRef(mlir::TensorType type) {
+
+//===----------------------------------------------------------------------===//
+// ToyToAffine RewritePatterns
+//===----------------------------------------------------------------------===//
+
+/// Convert the given TensorType into the corresponding MemRefType.
+static MemRefType convertTensorToMemRef(TensorType type) {
   assert(type.hasRank() && "expected only ranked shapes");
-  return mlir::MemRefType::get(type.getShape(), type.getElementType());
+  return MemRefType::get(type.getShape(), type.getElementType());
 }
 
-static mlir::Value insertAllocAndDealloc(mlir::MemRefType type, mlir::Location loc,
-                                         mlir::PatternRewriter &rewriter) {
-  auto alloc = rewriter.create<mlir::memref::AllocOp>(loc, type);
+/// Insert an allocation and deallocation for the given MemRefType.
+static Value insertAllocAndDealloc(MemRefType type, Location loc,
+                                   PatternRewriter &rewriter) {
+  auto alloc = rewriter.create<memref::AllocOp>(loc, type);
 
   // Make sure to allocate at the beginning of the block.
   auto *parentBlock = alloc->getBlock();
@@ -44,9 +51,47 @@ static mlir::Value insertAllocAndDealloc(mlir::MemRefType type, mlir::Location l
 
   // Make sure to deallocate this alloc at the end of the block. This is fine
   // as toy functions have no control flow.
-  auto dealloc = rewriter.create<mlir::memref::DeallocOp>(loc, alloc);
+  auto dealloc = rewriter.create<memref::DeallocOp>(loc, alloc);
   dealloc->moveBefore(&parentBlock->back());
   return alloc;
+}
+
+/// This defines the function type used to process an iteration of a lowered
+/// loop. It takes as input an OpBuilder, an range of memRefOperands
+/// corresponding to the operands of the input operation, and the range of loop
+/// induction variables for the iteration. It returns a value to store at the
+/// current index of the iteration.
+using LoopIterationFn = function_ref<Value(
+    OpBuilder &rewriter, ValueRange memRefOperands, ValueRange loopIvs)>;
+
+static void lowerOpToLoops(Operation *op, ValueRange operands,
+                           PatternRewriter &rewriter,
+                           LoopIterationFn processIteration) {
+  auto tensorType = (*op->result_type_begin()).cast<TensorType>();
+  auto loc = op->getLoc();
+
+  // Insert an allocation and deallocation for the result of this operation.
+  auto memRefType = convertTensorToMemRef(tensorType);
+  auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+  // Create a nest of affine loops, with one loop per dimension of the shape.
+  // The buildAffineLoopNest function takes a callback that is used to construct
+  // the body of the innermost loop given a builder, a location and a range of
+  // loop induction variables.
+  SmallVector<int64_t, 4> lowerBounds(tensorType.getRank(), /*Value=*/0);
+  SmallVector<int64_t, 4> steps(tensorType.getRank(), /*Value=*/1);
+  buildAffineLoopNest(
+      rewriter, loc, lowerBounds, tensorType.getShape(), steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+        // Call the processing function with the rewriter, the memref operands,
+        // and the loop induction variables. This function will return the value
+        // to store at the current index.
+        Value valueToStore = processIteration(nestedBuilder, operands, ivs);
+        nestedBuilder.create<AffineStoreOp>(loc, valueToStore, alloc, ivs);
+      });
+
+  // Replace this operation with the generated alloc.
+  rewriter.replaceOp(op, alloc);
 }
 
 //===----------------------------------------------------------------------===//
@@ -73,9 +118,9 @@ struct BinaryOpLowering : public mlir::ConversionPattern {
                      // Generate loads for the element of 'lhs' and 'rhs' at the
                      // inner loop.
                      auto loadedLhs = builder.create<AffineLoadOp>(
-                         loc, binaryAdaptor.getLhs(), loopIvs);
+                         loc, binaryAdaptor.lhs(), loopIvs);
                      auto loadedRhs = builder.create<AffineLoadOp>(
-                         loc, binaryAdaptor.getRhs(), loopIvs);
+                         loc, binaryAdaptor.rhs(), loopIvs);
 
                      // Create the binary operation performed on the loaded
                      // values.
