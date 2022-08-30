@@ -131,6 +131,7 @@ struct BinaryOpLowering : public mlir::ConversionPattern {
   }
 };
 using AddOpLowering = BinaryOpLowering<hello::AddOp, mlir::arith::AddFOp>;
+using MulOpLowering = BinaryOpLowering<hello::MulOp, mlir::arith::MulFOp>;
 
 class ConstantOpLowering : public mlir::OpRewritePattern<hello::ConstantOp> {
   using OpRewritePattern<hello::ConstantOp>::OpRewritePattern;
@@ -245,7 +246,7 @@ void HelloToAffineLowerPass::runOnOperation() {
   });
 
   mlir::RewritePatternSet patterns(&getContext());
-  patterns.add<AddOpLowering, ConstantOpLowering, PrintOpLowering>(&getContext());
+  patterns.add<AddOpLowering, MulOpLowering, ConstantOpLowering, PrintOpLowering>(&getContext());
 
   if (mlir::failed(mlir::applyPartialConversion(getOperation(), target, std::move(patterns)))) {
     signalPassFailure();

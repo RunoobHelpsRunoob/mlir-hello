@@ -8,6 +8,7 @@ include "mlir/Interfaces/CastInterfaces.td"
 include "HelloDialect.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
+
 def ConstantOp : Hello_Op<"constant", [NoSideEffect]> {
   let summary = "constant";
   let description = [{
@@ -55,6 +56,30 @@ def AddOp : Hello_Op<"add", [NoSideEffect]> {
     OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs)>
   ];
 }
+
+//===----------------------------------------------------------------------===//
+// MulOp
+//===----------------------------------------------------------------------===//
+
+def MulOp : Hello_Op<"mul", [NoSideEffect]> {
+  let summary = "element-wise multiply operation";
+  let description = [{
+    The "mul" operation performs element-wise multiply between two tensors.
+    The shapes of the tensor operands are expected to match.
+  }];
+
+  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
+  let results = (outs F64Tensor);
+
+  // Indicate that the operation has a custom parser and printer method.
+  let hasCustomAssemblyFormat = 1;
+
+  // Allow building an MulOp with from the two input operands.
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$lhs, "mlir::Value":$rhs)>
+  ];
+}
+
 
 
 def PrintOp : Hello_Op<"print", [NoSideEffect]> {

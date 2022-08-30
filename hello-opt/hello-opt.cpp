@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
   }
 
   dumpLLVMIR(*module);
-//  runJit(*module);
+  runJit(*module);
 
   return 0;
 }
